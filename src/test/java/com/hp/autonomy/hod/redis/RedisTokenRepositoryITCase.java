@@ -7,6 +7,7 @@ package com.hp.autonomy.hod.redis;
 
 import com.hp.autonomy.hod.client.api.authentication.AuthenticationToken;
 import com.hp.autonomy.hod.client.token.TokenProxy;
+import org.joda.time.DateTime;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -19,6 +20,7 @@ import redis.clients.jedis.Protocol;
 import redis.clients.util.Pool;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.nullValue;
@@ -65,7 +67,7 @@ public class RedisTokenRepositoryITCase {
 
     @Test
     public void testInsertedTokensCanBeRetrieved() throws IOException {
-        final AuthenticationToken token = new AuthenticationToken(1234567890L, "foo", "bar", "baz", 1234567890L);
+        final AuthenticationToken token = new AuthenticationToken(getExpiry(), "foo", "bar", "baz", getRefresh());
 
         final TokenProxy key = tokenRepository.insert(token);
 
@@ -74,11 +76,11 @@ public class RedisTokenRepositoryITCase {
 
     @Test
     public void testUpdate() throws IOException {
-        final AuthenticationToken token = new AuthenticationToken(1234567890L, "foo", "bar", "baz", 1234567890L);
+        final AuthenticationToken token = new AuthenticationToken(getExpiry(), "foo", "bar", "baz", getRefresh());
 
         final TokenProxy key = tokenRepository.insert(token);
 
-        final AuthenticationToken newToken = new AuthenticationToken(1234567890L + 3600L, "this", "token", "differs", 1234567890L + 3600L);
+        final AuthenticationToken newToken = new AuthenticationToken(getExpiry() + 3600L, "this", "token", "differs", getRefresh() + 3600L);
         tokenRepository.update(key, newToken);
 
         assertThat(tokenRepository.get(key), is(newToken));
@@ -87,7 +89,7 @@ public class RedisTokenRepositoryITCase {
     @Test
     public void testUpdateReturnsNullAndDoesNothingIfKeyNotPresent() throws IOException {
         final TokenProxy key = new TokenProxy();
-        final AuthenticationToken oldToken = tokenRepository.update(key, new AuthenticationToken(1234567890L, "foo", "bar", "baz", 1234567890L));
+        final AuthenticationToken oldToken = tokenRepository.update(key, new AuthenticationToken(getExpiry(), "foo", "bar", "baz", getRefresh()));
 
         assertThat(oldToken, is(nullValue()));
         assertThat(tokenRepository.get(key), is(nullValue()));
@@ -95,12 +97,53 @@ public class RedisTokenRepositoryITCase {
 
     @Test
     public void testRemove() throws IOException {
-        final AuthenticationToken token = new AuthenticationToken(1234567890L, "foo", "bar", "baz", 1234567890L);;
+        final AuthenticationToken token = new AuthenticationToken(getExpiry(), "foo", "bar", "baz", getRefresh());
         final TokenProxy key = tokenRepository.insert(token);
 
         assertThat(tokenRepository.remove(key), is(token));
         assertThat(tokenRepository.get(key), is(nullValue()));
     }
 
+    @Test
+    public void testExpiryOnInsert() throws IOException, InterruptedException {
+        final long expiry1 = DateTime.now().plusSeconds(2).getMillis() / 1000L;
+        final long expiry2 = DateTime.now().plusSeconds(12).getMillis() / 1000L;
 
+        final AuthenticationToken token1 = new AuthenticationToken(expiry1, "foo", "bar", "baz", getRefresh());
+        final TokenProxy key1 = tokenRepository.insert(token1);
+
+        final AuthenticationToken token2 = new AuthenticationToken(expiry2, "foo", "bar", "baz", getRefresh());
+        final TokenProxy key2 = tokenRepository.insert(token2);
+
+        TimeUnit.SECONDS.sleep(3L);
+
+        assertThat(tokenRepository.get(key1), is(nullValue()));
+        assertThat(tokenRepository.get(key2), is(token2));
+    }
+
+    @Test
+    public void testExpiryOnUpdate() throws IOException, InterruptedException {
+        final long expiry1 = DateTime.now().plusSeconds(2).getMillis() / 1000L;
+        final long expiry2 = DateTime.now().plusSeconds(5).getMillis() / 1000L;
+        final AuthenticationToken token1 = new AuthenticationToken(expiry1, "foo", "bar", "baz", getRefresh());
+
+        final TokenProxy key = tokenRepository.insert(token1);
+
+        final AuthenticationToken token2 = new AuthenticationToken(expiry2, "foo", "bar", "baz", getRefresh());
+        tokenRepository.update(key, token2);
+
+        TimeUnit.SECONDS.sleep(3L);
+        assertThat(tokenRepository.get(key), is(token2));
+
+        TimeUnit.SECONDS.sleep(3L);
+        assertThat(tokenRepository.get(key), is(nullValue()));
+    }
+
+    private long getExpiry() {
+        return DateTime.now().plusHours(1).getMillis() / 1000L;
+    }
+
+    private long getRefresh() {
+        return DateTime.now().plusMinutes(30).getMillis() / 1000L;
+    }
 }

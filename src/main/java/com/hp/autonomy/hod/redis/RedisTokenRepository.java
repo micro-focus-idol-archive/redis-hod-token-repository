@@ -8,6 +8,8 @@ package com.hp.autonomy.hod.redis;
 import com.hp.autonomy.hod.client.api.authentication.AuthenticationToken;
 import com.hp.autonomy.hod.client.token.TokenProxy;
 import com.hp.autonomy.hod.client.token.TokenRepository;
+import org.joda.time.DateTime;
+import org.joda.time.Seconds;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Response;
 import redis.clients.jedis.Transaction;
@@ -22,6 +24,8 @@ import java.io.Serializable;
 
 /**
  * Implementation of {@link TokenRepository} backed by a Redis instance
+ *
+ * This repository expires old tokens
  */
 public class RedisTokenRepository implements TokenRepository {
 
@@ -37,10 +41,12 @@ public class RedisTokenRepository implements TokenRepository {
 
     @Override
     public TokenProxy insert(final AuthenticationToken authenticationToken) throws IOException {
+        checkTokenExpiry(authenticationToken);
+
         try(final Jedis jedis = jedisPool.getResource()) {
             final TokenProxy key = new TokenProxy();
 
-            jedis.set(serialize(key), serialize(authenticationToken));
+            jedis.setex(serialize(key), getExpirySeconds(authenticationToken.getExpiry()), serialize(authenticationToken));
 
             return key;
         }
@@ -48,6 +54,8 @@ public class RedisTokenRepository implements TokenRepository {
 
     @Override
     public AuthenticationToken update(final TokenProxy tokenProxy, final AuthenticationToken authenticationToken) throws IOException {
+        checkTokenExpiry(authenticationToken);
+
         try(final Jedis jedis = jedisPool.getResource()) {
             final byte[] keyBytes = serialize(tokenProxy);
 
@@ -55,7 +63,7 @@ public class RedisTokenRepository implements TokenRepository {
 
             final Response<byte[]> oldTokenResponse = transaction.get(keyBytes);
 
-            transaction.set(keyBytes, serialize(authenticationToken), "XX".getBytes());
+            transaction.set(keyBytes, serialize(authenticationToken), "XX".getBytes(), "EX".getBytes(), getExpirySeconds(authenticationToken.getExpiry()));
 
             transaction.exec();
 
@@ -88,6 +96,12 @@ public class RedisTokenRepository implements TokenRepository {
         }
     }
 
+    private void checkTokenExpiry(final AuthenticationToken authenticationToken) {
+        if(authenticationToken.hasExpired()) {
+            throw new IllegalArgumentException("Token has already expired");
+        }
+    }
+
     private byte[] serialize(final Serializable serializable) throws IOException {
         final ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
         final ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream);
@@ -108,5 +122,9 @@ public class RedisTokenRepository implements TokenRepository {
         } catch (final ClassNotFoundException e) {
             throw new AssertionError("Required classes are not available", e);
         }
+    }
+
+    private int getExpirySeconds(final DateTime dateTime) {
+        return Seconds.secondsBetween(DateTime.now(), dateTime).getSeconds();
     }
 }
