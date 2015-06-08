@@ -25,10 +25,13 @@ import java.util.concurrent.TimeUnit;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.core.Is.is;
+import static org.junit.Assert.fail;
 
 public class RedisTokenRepositoryITCase {
 
+    private static final long THE_PAST = 1234567890L;
     private static Pool<Jedis> pool;
+
     private RedisTokenRepository tokenRepository;
 
     @BeforeClass
@@ -137,6 +140,29 @@ public class RedisTokenRepositoryITCase {
 
         TimeUnit.SECONDS.sleep(3L);
         assertThat(tokenRepository.get(key), is(nullValue()));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testInsertThrowsIllegalArgumentExceptionForExpiredTokens() throws IOException {
+        final AuthenticationToken token = new AuthenticationToken(THE_PAST, "foo", "bar", "baz", THE_PAST);
+
+        tokenRepository.insert(token);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testUpdateThrowsIllegalArgumentExceptionForExpiredTokens() throws IOException {
+        final AuthenticationToken token1 = new AuthenticationToken(getExpiry(), "foo", "bar", "baz", getRefresh());
+        final AuthenticationToken token2 = new AuthenticationToken(THE_PAST, "foo", "bar", "baz", THE_PAST);
+
+        TokenProxy key = null;
+
+        try {
+            key = tokenRepository.insert(token1);
+        } catch (final IllegalArgumentException e) {
+            fail("The initial token should not have expired");
+        }
+
+        tokenRepository.update(key, token2);
     }
 
     private long getExpiry() {
