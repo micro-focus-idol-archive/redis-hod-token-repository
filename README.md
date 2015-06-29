@@ -8,12 +8,12 @@ Designed for use with the [java-hod-client](http://hpautonomy.github.io/java-hod
 
 ## Usage
 
-java-hod-client is available from the central Maven repository.
+redis-hod-token-repository is available from the central Maven repository.
 
     <dependency>
         <groupId>com.hp.autonomy.hod</groupId>
-        <artifactId>redis-hod-token-repo</artifactId>
-        <version>0.1.0</version>
+        <artifactId>redis-hod-token-repository</artifactId>
+        <version>0.2.0</version>
     </dependency>
 
 ## License
