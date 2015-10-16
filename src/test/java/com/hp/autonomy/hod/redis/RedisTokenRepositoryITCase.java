@@ -36,8 +36,11 @@ public class RedisTokenRepositoryITCase {
 
     @BeforeClass
     public static void setUpAll() {
+        final JedisPoolConfig poolConfig = new JedisPoolConfig();
+        poolConfig.setMaxTotal(1);
+
         pool = new JedisPool(
-            new JedisPoolConfig(),
+            poolConfig,
             System.getProperty("hp.hod.redisHost", "localhost"),
             Integer.parseInt(System.getProperty("hp.hod.redisPort", "6379")),
             Protocol.DEFAULT_TIMEOUT,
@@ -48,7 +51,11 @@ public class RedisTokenRepositoryITCase {
 
     @Before
     public void setUp() {
-        tokenRepository = new RedisTokenRepository(pool);
+        tokenRepository = new RedisTokenRepository(new RedisTokenRepositoryConfig.Builder()
+            .setHost(System.getProperty("hp.hod.redisHost", "localhost"))
+            .setPort(Integer.parseInt(System.getProperty("hp.hod.redisPort", "6379")))
+            .setDatabase(Integer.parseInt(System.getProperty("hp.hod.redisDb", "0")))
+            .build());
     }
 
     @After
@@ -56,6 +63,8 @@ public class RedisTokenRepositoryITCase {
         try(final Jedis jedis = pool.getResource()) {
             jedis.flushDB();
         }
+
+        tokenRepository.destroy();
     }
 
     @AfterClass
