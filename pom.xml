@@ -12,7 +12,7 @@
 
     <groupId>com.hp.autonomy.hod.redis</groupId>
     <artifactId>redis-hod-token-repository</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
 
     <description>Redis based repository for HP Haven OnDemand authentication tokens</description>
 
@@ -72,6 +72,12 @@
             <groupId>redis.clients</groupId>
             <artifactId>jedis</artifactId>
             <version>2.6.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.16.4</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>junit</groupId>
