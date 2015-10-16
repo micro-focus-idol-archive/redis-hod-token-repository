@@ -13,6 +13,9 @@ import com.hp.autonomy.hod.client.token.TokenRepository;
 import org.joda.time.DateTime;
 import org.joda.time.Seconds;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.JedisPoolConfig;
+import redis.clients.jedis.JedisSentinelPool;
 import redis.clients.jedis.Response;
 import redis.clients.jedis.Transaction;
 import redis.clients.util.Pool;
@@ -23,22 +26,53 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
- * Implementation of {@link TokenRepository} backed by a Redis instance
+ * Implementation of {@link TokenRepository} backed by a Redis instance. The {@link #destroy()} method should be called
+ * when the repository is no longer needed.
  *
- * This repository expires old tokens
+ * This repository expires old tokens.
  */
 public class RedisTokenRepository implements TokenRepository {
 
     private final Pool<Jedis> jedisPool;
 
     /**
-     * Creates a new RedisTokenRepository
-     * @param jedisPool The pool of Jedis connections to use. This should be shut down externally when no longer needed
+     * Creates a new RedisTokenRepository using a single Redis instance.
+     * @param config The Redis configuration to use
      */
-    public RedisTokenRepository(final Pool<Jedis> jedisPool) {
-        this.jedisPool = jedisPool;
+    public RedisTokenRepository(final RedisTokenRepositoryConfig config) {
+        this.jedisPool = new JedisPool(
+            new JedisPoolConfig(),
+            config.getHost(),
+            config.getPort(),
+            config.getTimeout(),
+            config.getPassword(),
+            config.getDatabase()
+        );
+    }
+
+    /**
+     * Creates a new RedisTokenRepository using Redis sentinels.
+     * @param config The Redis configuration to use
+     */
+    public RedisTokenRepository(final RedisTokenRepositorySentinelConfig config) {
+        final Set<String> sentinels = new HashSet<>();
+
+        for (final RedisTokenRepositorySentinelConfig.HostAndPort hostAndPort : config.getHostsAndPorts()) {
+            sentinels.add(hostAndPort.getHost() + ':' + hostAndPort.getPort());
+        }
+
+        this.jedisPool = new JedisSentinelPool(
+            config.getMasterName(),
+            sentinels,
+            new JedisPoolConfig(),
+            config.getTimeout(),
+            config.getPassword(),
+            config.getDatabase()
+        );
     }
 
     @Override
@@ -99,6 +133,13 @@ public class RedisTokenRepository implements TokenRepository {
             //noinspection unchecked
             return (AuthenticationToken<E, T>) deserialize(oldTokenResponse.get());
         }
+    }
+
+    /**
+     * Shuts down the token repository. This method should be called when the repository is no longer needed.
+     */
+    public void destroy() {
+        this.jedisPool.destroy();
     }
 
     private void checkTokenExpiry(final AuthenticationToken<?, ?> authenticationToken) {
