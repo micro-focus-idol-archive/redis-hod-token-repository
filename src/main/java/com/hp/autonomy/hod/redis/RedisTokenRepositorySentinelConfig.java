@@ -41,7 +41,7 @@ public class RedisTokenRepositorySentinelConfig {
         /**
          * @param password The password of the Redis. This may be omitted if no password is used.
          */
-        private String password = "";
+        private String password;
 
         /**
          * @param database The Redis database to use. Defaults to 0
