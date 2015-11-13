@@ -6,6 +6,8 @@
 package com.hp.autonomy.hod.redis;
 
 import com.hp.autonomy.hod.client.api.authentication.AuthenticationToken;
+import com.hp.autonomy.hod.client.api.authentication.EntityType;
+import com.hp.autonomy.hod.client.api.authentication.TokenType;
 import com.hp.autonomy.hod.client.token.TokenProxy;
 import org.joda.time.DateTime;
 import org.junit.After;
@@ -29,7 +31,7 @@ import static org.junit.Assert.fail;
 
 public class RedisTokenRepositoryITCase {
 
-    private static final long THE_PAST = 1234567890L;
+    private static final DateTime THE_PAST = new DateTime(1234567890L);
     private static Pool<Jedis> pool;
 
     private RedisTokenRepository tokenRepository;
@@ -74,25 +76,26 @@ public class RedisTokenRepositoryITCase {
 
     @Test
     public void testGetReturnsNullIfNoKey() throws IOException {
-        assertThat(tokenRepository.get(new TokenProxy()), is(nullValue()));
+        assertThat(tokenRepository.get(new TokenProxy<>(EntityType.Application.INSTANCE, TokenType.Simple.INSTANCE)), is(nullValue()));
     }
 
     @Test
     public void testInsertedTokensCanBeRetrieved() throws IOException {
-        final AuthenticationToken token = new AuthenticationToken(getExpiry(), "foo", "bar", "baz", getRefresh());
+        final AuthenticationToken<EntityType.Application, TokenType.Simple> token = getAppToken(getExpiry(), getRefresh());
 
-        final TokenProxy key = tokenRepository.insert(token);
+        final TokenProxy<EntityType.Application, TokenType.Simple> key = tokenRepository.insert(token);
 
         assertThat(tokenRepository.get(key), is(token));
     }
 
     @Test
     public void testUpdate() throws IOException {
-        final AuthenticationToken token = new AuthenticationToken(getExpiry(), "foo", "bar", "baz", getRefresh());
+        final AuthenticationToken<EntityType.Application, TokenType.Simple> token = getAppToken(getExpiry(), getRefresh());
 
-        final TokenProxy key = tokenRepository.insert(token);
+        final TokenProxy<EntityType.Application, TokenType.Simple> key = tokenRepository.insert(token);
 
-        final AuthenticationToken newToken = new AuthenticationToken(getExpiry() + 3600L, "this", "token", "differs", getRefresh() + 3600L);
+        final AuthenticationToken<EntityType.Application, TokenType.Simple> newToken = getAppToken(getExpiry().plusHours(1), getRefresh().plusHours(1));
+
         tokenRepository.update(key, newToken);
 
         assertThat(tokenRepository.get(key), is(newToken));
@@ -100,8 +103,11 @@ public class RedisTokenRepositoryITCase {
 
     @Test
     public void testUpdateReturnsNullAndDoesNothingIfKeyNotPresent() throws IOException {
-        final TokenProxy key = new TokenProxy();
-        final AuthenticationToken oldToken = tokenRepository.update(key, new AuthenticationToken(getExpiry(), "foo", "bar", "baz", getRefresh()));
+        final TokenProxy<EntityType.Application, TokenType.Simple> key = new TokenProxy<>(EntityType.Application.INSTANCE, TokenType.Simple.INSTANCE);
+
+        final AuthenticationToken<EntityType.Application, TokenType.Simple> newToken = getAppToken(getExpiry(), getRefresh());
+
+        final AuthenticationToken<EntityType.Application, TokenType.Simple> oldToken = tokenRepository.update(key, newToken);
 
         assertThat(oldToken, is(nullValue()));
         assertThat(tokenRepository.get(key), is(nullValue()));
@@ -109,8 +115,9 @@ public class RedisTokenRepositoryITCase {
 
     @Test
     public void testRemove() throws IOException {
-        final AuthenticationToken token = new AuthenticationToken(getExpiry(), "foo", "bar", "baz", getRefresh());
-        final TokenProxy key = tokenRepository.insert(token);
+        final AuthenticationToken<EntityType.Application, TokenType.Simple> token = getAppToken(getExpiry(), getRefresh());
+
+        final TokenProxy<EntityType.Application, TokenType.Simple> key = tokenRepository.insert(token);
 
         assertThat(tokenRepository.remove(key), is(token));
         assertThat(tokenRepository.get(key), is(nullValue()));
@@ -118,14 +125,14 @@ public class RedisTokenRepositoryITCase {
 
     @Test
     public void testExpiryOnInsert() throws IOException, InterruptedException {
-        final long expiry1 = DateTime.now().plusSeconds(2).getMillis() / 1000L;
-        final long expiry2 = DateTime.now().plusSeconds(12).getMillis() / 1000L;
+        final DateTime expiry1 = DateTime.now().plusSeconds(2);
+        final DateTime expiry2 = DateTime.now().plusSeconds(12);
 
-        final AuthenticationToken token1 = new AuthenticationToken(expiry1, "foo", "bar", "baz", getRefresh());
-        final TokenProxy key1 = tokenRepository.insert(token1);
+        final AuthenticationToken<EntityType.Application, TokenType.Simple> token1 = getAppToken(expiry1, getRefresh());
+        final TokenProxy<EntityType.Application, TokenType.Simple> key1 = tokenRepository.insert(token1);
 
-        final AuthenticationToken token2 = new AuthenticationToken(expiry2, "foo", "bar", "baz", getRefresh());
-        final TokenProxy key2 = tokenRepository.insert(token2);
+        final AuthenticationToken<EntityType.Application, TokenType.Simple> token2 = getAppToken(expiry2, getRefresh());
+        final TokenProxy<EntityType.Application, TokenType.Simple> key2 = tokenRepository.insert(token2);
 
         TimeUnit.SECONDS.sleep(3L);
 
@@ -135,13 +142,13 @@ public class RedisTokenRepositoryITCase {
 
     @Test
     public void testExpiryOnUpdate() throws IOException, InterruptedException {
-        final long expiry1 = DateTime.now().plusSeconds(2).getMillis() / 1000L;
-        final long expiry2 = DateTime.now().plusSeconds(5).getMillis() / 1000L;
-        final AuthenticationToken token1 = new AuthenticationToken(expiry1, "foo", "bar", "baz", getRefresh());
+        final DateTime expiry1 = DateTime.now().plusSeconds(2);
+        final DateTime expiry2 = DateTime.now().plusSeconds(5);
+        final AuthenticationToken<EntityType.Application, TokenType.Simple> token1 = getAppToken(expiry1, getRefresh());
 
-        final TokenProxy key = tokenRepository.insert(token1);
+        final TokenProxy<EntityType.Application, TokenType.Simple> key = tokenRepository.insert(token1);
 
-        final AuthenticationToken token2 = new AuthenticationToken(expiry2, "foo", "bar", "baz", getRefresh());
+        final AuthenticationToken<EntityType.Application, TokenType.Simple> token2 = getAppToken(expiry2, getRefresh());
         tokenRepository.update(key, token2);
 
         TimeUnit.SECONDS.sleep(3L);
@@ -153,17 +160,17 @@ public class RedisTokenRepositoryITCase {
 
     @Test(expected = IllegalArgumentException.class)
     public void testInsertThrowsIllegalArgumentExceptionForExpiredTokens() throws IOException {
-        final AuthenticationToken token = new AuthenticationToken(THE_PAST, "foo", "bar", "baz", THE_PAST);
+        final AuthenticationToken<EntityType.Application, TokenType.Simple> token = getAppToken(THE_PAST, THE_PAST);
 
         tokenRepository.insert(token);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void testUpdateThrowsIllegalArgumentExceptionForExpiredTokens() throws IOException {
-        final AuthenticationToken token1 = new AuthenticationToken(getExpiry(), "foo", "bar", "baz", getRefresh());
-        final AuthenticationToken token2 = new AuthenticationToken(THE_PAST, "foo", "bar", "baz", THE_PAST);
+        final AuthenticationToken<EntityType.Application, TokenType.Simple> token1 = getAppToken(getExpiry(), getRefresh());
+        final AuthenticationToken<EntityType.Application, TokenType.Simple> token2 = getAppToken(THE_PAST, THE_PAST);
 
-        TokenProxy key = null;
+        TokenProxy<EntityType.Application, TokenType.Simple> key = null;
 
         try {
             key = tokenRepository.insert(token1);
@@ -174,11 +181,52 @@ public class RedisTokenRepositoryITCase {
         tokenRepository.update(key, token2);
     }
 
-    private long getExpiry() {
-        return DateTime.now().plusHours(1).getMillis() / 1000L;
+    @Test
+    public void multipleTokenTypes() throws IOException {
+        final AuthenticationToken<EntityType.Combined, TokenType.Simple> combinedToken = new AuthenticationToken<>(
+            EntityType.Combined.INSTANCE,
+            TokenType.Simple.INSTANCE,
+            getExpiry(),
+            "combined-id",
+            "combined-secret",
+            getRefresh()
+        );
+
+        final AuthenticationToken<EntityType.Developer, TokenType.HmacSha1> developerToken = new AuthenticationToken<>(
+            EntityType.Developer.INSTANCE,
+            TokenType.HmacSha1.INSTANCE,
+            getExpiry(),
+            "developer-id",
+            "developer-secret",
+            getRefresh()
+        );
+
+        final TokenProxy<EntityType.Combined, TokenType.Simple> combinedTokenProxy = tokenRepository.insert(combinedToken);
+        final TokenProxy<EntityType.Developer, TokenType.HmacSha1> developerTokenProxy = tokenRepository.insert(developerToken);
+
+        final AuthenticationToken<EntityType.Combined, TokenType.Simple> outputCombinedToken = tokenRepository.get(combinedTokenProxy);
+        final AuthenticationToken<EntityType.Developer, TokenType.HmacSha1> outputDeveloperToken = tokenRepository.get(developerTokenProxy);
+
+        assertThat(outputDeveloperToken, is(developerToken));
+        assertThat(outputCombinedToken, is(combinedToken));
     }
 
-    private long getRefresh() {
-        return DateTime.now().plusMinutes(30).getMillis() / 1000L;
+    private AuthenticationToken<EntityType.Application, TokenType.Simple> getAppToken(final DateTime expiry, final DateTime refresh) {
+        return new AuthenticationToken<>(
+            EntityType.Application.INSTANCE,
+            TokenType.Simple.INSTANCE,
+            expiry,
+            "foo",
+            "bar",
+            refresh
+        );
+    }
+
+    private DateTime getExpiry() {
+        return DateTime.now().plusHours(1);
+    }
+
+    private DateTime getRefresh() {
+        return DateTime.now().plusMinutes(30);
     }
 }

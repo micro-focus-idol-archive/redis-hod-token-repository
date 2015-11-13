@@ -6,6 +6,8 @@
 package com.hp.autonomy.hod.redis;
 
 import com.hp.autonomy.hod.client.api.authentication.AuthenticationToken;
+import com.hp.autonomy.hod.client.api.authentication.EntityType;
+import com.hp.autonomy.hod.client.api.authentication.TokenType;
 import com.hp.autonomy.hod.client.token.TokenProxy;
 import com.hp.autonomy.hod.client.token.TokenRepository;
 import org.joda.time.DateTime;
@@ -74,11 +76,11 @@ public class RedisTokenRepository implements TokenRepository {
     }
 
     @Override
-    public TokenProxy insert(final AuthenticationToken authenticationToken) throws IOException {
+    public <E extends EntityType, T extends TokenType> TokenProxy<E, T> insert(final AuthenticationToken<E, T> authenticationToken) throws IOException {
         checkTokenExpiry(authenticationToken);
 
         try(final Jedis jedis = jedisPool.getResource()) {
-            final TokenProxy key = new TokenProxy();
+            final TokenProxy<E, T> key = new TokenProxy<>(authenticationToken.getEntityType(), authenticationToken.getTokenType());
 
             jedis.setex(serialize(key), getExpirySeconds(authenticationToken.getExpiry()), serialize(authenticationToken));
 
@@ -87,7 +89,7 @@ public class RedisTokenRepository implements TokenRepository {
     }
 
     @Override
-    public AuthenticationToken update(final TokenProxy tokenProxy, final AuthenticationToken authenticationToken) throws IOException {
+    public <E extends EntityType, T extends TokenType> AuthenticationToken<E, T> update(final TokenProxy<E, T> tokenProxy, final AuthenticationToken<E, T> authenticationToken) throws IOException {
         checkTokenExpiry(authenticationToken);
 
         try(final Jedis jedis = jedisPool.getResource()) {
@@ -101,21 +103,23 @@ public class RedisTokenRepository implements TokenRepository {
 
             transaction.exec();
 
-            return (AuthenticationToken) deserialize(oldTokenResponse.get());
+            //noinspection unchecked
+            return (AuthenticationToken<E, T>) deserialize(oldTokenResponse.get());
         }
     }
 
     @Override
-    public AuthenticationToken get(final TokenProxy tokenProxy) throws IOException {
+    public <E extends EntityType, T extends TokenType> AuthenticationToken<E, T> get(final TokenProxy<E, T> tokenProxy) throws IOException {
         try(final Jedis jedis = jedisPool.getResource()) {
             final byte[] bytes = jedis.get(serialize(tokenProxy));
 
-            return (AuthenticationToken) deserialize(bytes);
+            //noinspection unchecked
+            return (AuthenticationToken<E, T>) deserialize(bytes);
         }
     }
 
     @Override
-    public AuthenticationToken remove(final TokenProxy tokenProxy) throws IOException {
+    public <E extends EntityType, T extends TokenType> AuthenticationToken<E, T> remove(final TokenProxy<E, T> tokenProxy) throws IOException {
         try(final Jedis jedis = jedisPool.getResource()) {
             final byte[] keyBytes = serialize(tokenProxy);
 
@@ -126,7 +130,8 @@ public class RedisTokenRepository implements TokenRepository {
 
             transaction.exec();
 
-            return (AuthenticationToken) deserialize(oldTokenResponse.get());
+            //noinspection unchecked
+            return (AuthenticationToken<E, T>) deserialize(oldTokenResponse.get());
         }
     }
 
@@ -137,7 +142,7 @@ public class RedisTokenRepository implements TokenRepository {
         this.jedisPool.destroy();
     }
 
-    private void checkTokenExpiry(final AuthenticationToken authenticationToken) {
+    private void checkTokenExpiry(final AuthenticationToken<?, ?> authenticationToken) {
         if(authenticationToken.hasExpired()) {
             throw new IllegalArgumentException("Token has already expired");
         }

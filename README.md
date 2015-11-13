@@ -13,7 +13,7 @@ redis-hod-token-repository is available from the central Maven repository.
     <dependency>
         <groupId>com.hp.autonomy.hod</groupId>
         <artifactId>redis-hod-token-repository</artifactId>
-        <version>0.3.1</version>
+        <version>0.4.0</version>
     </dependency>
 
 ## License
