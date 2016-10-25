@@ -28,6 +28,7 @@ import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Implementation of {@link TokenRepository} backed by a Redis instance. The {@link #destroy()} method should be called
@@ -59,11 +60,10 @@ public class RedisTokenRepository implements TokenRepository {
      * @param config The Redis configuration to use
      */
     public RedisTokenRepository(final RedisTokenRepositorySentinelConfig config) {
-        final Set<String> sentinels = new HashSet<>();
-
-        for (final RedisTokenRepositorySentinelConfig.HostAndPort hostAndPort : config.getHostsAndPorts()) {
-            sentinels.add(hostAndPort.getHost() + ':' + hostAndPort.getPort());
-        }
+        final Set<String> sentinels = config.getHostsAndPorts()
+                .stream()
+                .map(hostAndPort -> hostAndPort.getHost() + ':' + hostAndPort.getPort())
+                .collect(Collectors.toSet());
 
         this.jedisPool = new JedisSentinelPool(
             config.getMasterName(),
